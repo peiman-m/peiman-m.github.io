@@ -1,0 +1,189 @@
+@import url("https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;1,400&display=swap");
+
+/* Palette */
+
+:root {
+  --bg:    #f3f4f7;   /* cool paper */
+  --fg:    #171a21;   /* titles */
+  --mid:   #4c5563;   /* venues: between title and author list */
+  --muted: #798294;   /* author lists, captions */
+  --link:  #33478c;   /* indigo */
+}
+
+/* Dark palette is opt-in, not OS-driven: set <body a="dark">. */
+body[a="dark"] {
+  --bg:    #14161b;
+  --fg:    #e2e5ea;
+  --mid:   #aab2c0;
+  --muted: #838b9a;
+  --link:  #8aa4e8;
+}
+
+/* Base */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "EB Garamond", Garamond, Georgia, serif;
+  font-size: 17px;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+
+.w {
+  max-width: 960px;      /* width of the content column */
+  margin: 0 auto;
+  padding: 4rem 1rem 5rem;   /* second value is the side gutter */
+}
+
+p { margin: 1rem 0; }
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+a:hover { text-decoration: underline; }
+
+a:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+/* Background canvas (see background.js) */
+
+#bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Name */
+
+h1 {
+  margin: 0 0 1.5rem;
+  font-size: 2.1rem;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+h1 .given { font-weight: 600; }
+
+/* Profile photo */
+
+.profile {
+  float: right;
+  width: 26%;
+  margin: 0.3rem 0 1rem 1.6rem;
+}
+
+.profile img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(23, 26, 33, 0.15);   /* tinted to the ink, not pure black */
+}
+
+/* Social icons */
+
+.social {
+  display: flex;
+  justify-content: center;
+  gap: 1.15rem;
+  margin-top: 0.7rem;
+}
+
+.social a {
+  display: inline-flex;
+  color: var(--muted);
+  transition: color 0.15s ease;
+}
+
+.social a:hover { color: var(--link); }
+
+.social svg {
+  display: block;
+  width: 19px;
+  height: 19px;
+  fill: currentColor;
+}
+
+/* Brand icons carry their official colors; GitHub's mark is near-black, so it
+   flips to the light foreground when the dark palette is on. */
+.social .gh { fill: #181717; }
+body[a="dark"] .social .gh { fill: #e2e5ea; }
+
+/* Publications */
+
+h2 {
+  clear: both;
+  margin: 2.75rem 0 1.1rem;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.pubs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pubs li { margin-bottom: 1.7rem; }
+
+.pubs li:last-child { margin-bottom: 0; }
+
+/* Three levels of emphasis per entry: title, then venue, then authors. */
+
+.title {
+  display: block;
+  font-weight: 600;
+  text-wrap: pretty;
+}
+
+/* Acronyms carry the full venue name for anyone outside the field, without the
+   default dotted underline. */
+.venue abbr {
+  text-decoration: none;
+  border-bottom: none;
+  cursor: help;
+}
+
+.venue {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--mid);
+  font-size: 0.80em;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.authors {
+  display: block;
+  margin-top: 0.05rem;
+  color: var(--muted);
+  font-size: 0.94em;
+}
+
+/* Small screens */
+
+@media (max-width: 560px) {
+  .w { padding: 2.5rem 0.9rem 4rem; }
+
+  .profile {
+    float: none;
+    display: block;
+    width: 55%;
+    margin: 0 auto 1.5rem;
+  }
+}

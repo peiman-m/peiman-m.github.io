@@ -13,7 +13,7 @@ server to run; the only external request is the webfont.
 
 Two points are picked just off the screen edge: left and right on a landscape screen, top
 and bottom on a portrait one, so that the straight line between them leans anywhere from
-level to a 20° diagonal. That line is the axis, and two independent Gaussian processes
+level to an 11° diagonal. That line is the axis, and two independent Gaussian processes
 model the deviation from it, one across the screen and one into it:
 
 ```

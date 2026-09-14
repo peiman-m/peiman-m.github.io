@@ -207,17 +207,18 @@ h2 {
   list-style: none;
 }
 
-.pubs li { margin-bottom: 1.7rem; }
+.pubs li {
+  margin-bottom: 1.7rem;
+  text-wrap: pretty;   /* set here, since the title link below is inline */
+}
 
 .pubs li:last-child { margin-bottom: 0; }
 
 /* Three levels of emphasis per entry: title, then venue, then authors. */
 
-.title {
-  display: block;
-  font-weight: 600;
-  text-wrap: pretty;
-}
+/* The title link stays inline, so only its words are clickable rather than the whole line.
+   The venue below is a block, so it still starts on a line of its own. */
+.title { font-weight: 600; }
 
 /* Acronyms carry the full venue name for anyone outside the field, without the
    default dotted underline. */

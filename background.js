@@ -57,7 +57,7 @@
 
   var SWING  = 0.4;         // how far the bundle rocks either way about its axis, in radians
   var TILT_MIN = 0;         // each new curve leans between these many degrees, up or down
-  var TILT_MAX = 20;
+  var TILT_MAX = 11;
   var FOCAL  = 1.6;         // camera distance from the screen, in multiples of its long side
   var PIECE  = 8;           // grid points per stroked piece of thread, each shaded by depth
 

@@ -1,26 +1,36 @@
-/* Background: sequential GP inference across the screen, drawn as posterior samples.
+/* Background: sequential GP inference across the screen, drawn as posterior samples in 3D.
  *
  * Two points are chosen just off the screen edge: left and right on a landscape screen,
- * top and bottom near the right side on a portrait one. The straight line between them
- * is taken as the axis, and a Gaussian process models the perpendicular deviation:
+ * top and bottom on a portrait one, so that the straight line between them leans anywhere
+ * from level to a shallow diagonal. That line is taken as the axis, and two independent
+ * Gaussian processes model the deviation from it, one along the in-screen normal n and one
+ * along the depth axis z:
  *
- *     P(t) = A + t (B - A) + f(t) n,      f ~ GP(0, k),   t in [0, 1]
+ *     P(t) = A + t (B - A) + f1(t) n + f2(t) z,      f1, f2 ~ GP(0, k),   t in [0, 1]
  *
  * The endpoints are observations pinned at f = 0. From there the path is walked from
- * start to end: every so often a new observation is revealed, its value drawn from the
- * current posterior at that location, and the GP is refit.
+ * start to end: every so often a new observation is revealed, a point in space whose two
+ * offsets are drawn from the current posterior at that location, and the GP is refit.
  *
- * Nothing is drawn as a band. Writing the posterior covariance as L L^T, a sample is
+ * Both offsets share the kernel and the observation locations, so they share the posterior
+ * covariance too: one Cholesky factor serves both, and only the means differ. Writing that
+ * covariance as L L^T, a sample is
  *
- *     mean + L w,     w ~ N(0, I)
+ *     (mean1 + L w1,  mean2 + L w2),     w1, w2 ~ N(0, I)
  *
- * and sixteen of them are stroked as hairlines. They pinch together at every observation
- * and fan out wherever nothing has been seen, so the uncertainty reads as spread. Each w is
- * rotated slowly between two fixed Gaussian vectors, which keeps its N(0, I) marginal, so
- * every frame is still a valid posterior draw, while moving along a smooth path.
+ * and sixteen of them are stroked as hairlines. They form a bundle, tied together at every
+ * observation and spread wherever nothing has been seen, so the uncertainty reads as the
+ * width of the bundle. Each w is rotated slowly between two fixed Gaussian vectors, which
+ * keeps its N(0, I) marginal, so every frame is still a valid posterior draw, while moving
+ * along a smooth path.
+ *
+ * A still projection of a curve in space looks like a flat curve, so the depth is shown three
+ * ways. The bundle rocks slowly about its own axis, so near and far parts move against each
+ * other while the pinned ends stay put. It is projected in perspective. And nearer pieces of
+ * thread are drawn darker and a little thicker, nearer observations as larger dots.
  *
  * The drawn posterior follows each refit through a critically damped spring rather than a
- * timed ease, so the fan tightens smoothly, and an observation landing mid-squeeze only
+ * timed ease, so the bundle tightens smoothly, and an observation landing mid-squeeze only
  * redirects the motion instead of stopping it or making it jump. After the walk reaches the
  * far end the finished curve holds, fades, and a new one begins with fresh endpoints and
  * lengthscale.
@@ -35,7 +45,7 @@
   if (!canvas || !canvas.getContext) return;
   var ctx = canvas.getContext('2d');
 
-  var GRID         = 128;   // prediction points along the path
+  var GRID         = 192;   // prediction points along the path
   var SAMPLES      = 16;    // posterior samples drawn as threads
   var STEP_FRAMES  = 330;   // frames between observations, about five and a half seconds
   var SETTLE_FRAMES = 450;  // frames for the threads to settle after a refit (95%), 7.5 s
@@ -43,6 +53,13 @@
   var HOLD_FRAMES  = 1800;  // pause on the finished curve, about thirty seconds
   var FADE_FRAMES  = 300;   // fade in / out, about five seconds each way
   var INTRO_FRAMES = 60;    // blank beat on first load before the threads fade in
+  var SWING_FRAMES = 5400;  // one full rock of the bundle, there and back, ninety seconds
+
+  var SWING  = 0.4;         // how far the bundle rocks either way about its axis, in radians
+  var TILT_MIN = 0;         // each new curve leans between these many degrees, up or down
+  var TILT_MAX = 20;
+  var FOCAL  = 1.6;         // camera distance from the screen, in multiples of its long side
+  var PIECE  = 8;           // grid points per stroked piece of thread, each shaded by depth
 
   var SMOOTH_PASSES = 3;    // low-pass along each thread, to kill grid-scale roughness
 
@@ -54,20 +71,40 @@
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // The threads take their colour (--fg) and per-thread opacity (--curve) from the palette,
-  // which changes with the theme, so both are read again whenever it flips (see the
-  // observer near the bottom).
-  var ink, opacity;
+  // and the observation spheres are shaded between that ink and the page (--bg), with the
+  // body --sphere of the way toward the ink. All of it changes with the theme, so it is read
+  // again whenever that flips (see the observer near the bottom).
+  var ink, inkRGB, paperRGB, opacity, sphereTone;
   function readPalette() {
     var root = getComputedStyle(document.documentElement);
     ink = root.getPropertyValue('--fg').trim() || '#171a21';
-    opacity = parseFloat(root.getPropertyValue('--curve')) || 0.09;
+    inkRGB = parseHex(ink);
+    paperRGB = parseHex(root.getPropertyValue('--bg').trim() || '#f3f4f7');
+    opacity = parseFloat(root.getPropertyValue('--curve')) || 0.12;
+    sphereTone = parseFloat(root.getPropertyValue('--sphere')) || 0.32;
   }
+
+  // '#rrggbb' to [r, g, b], which is how the palette writes its colours.
+  function parseHex(hex) {
+    var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+    return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [128, 128, 128];
+  }
+
+  function mix(a, b, t) {
+    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  }
+
+  function rgb(c) {
+    return 'rgb(' + Math.round(c[0]) + ',' + Math.round(c[1]) + ',' + Math.round(c[2]) + ')';
+  }
+
   readPalette();
 
   var w = 0, h = 0, dpr = 1;
   var paths = [];
 
   function rand(a, b) { return a + Math.random() * (b - a); }
+  function clamp(x, lo, hi) { return x < lo ? lo : (x > hi ? hi : x); }
   function randInt(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
 
   function randn() {
@@ -140,7 +177,7 @@
   /* posterior on the grid */
 
   function posterior(p) {
-    var n = p.obs.length, m = GRID, i, j, s;
+    var n = p.obs.length, m = GRID, i, j, s, d;
     var k = p.k, amp2 = p.amp * p.amp, noise = amp2 * 1e-4;
 
     var Kcc = new Float64Array(n * n);
@@ -151,20 +188,27 @@
     }
     var Lc = cholesky(Kcc, n);
 
-    var yv = new Float64Array(n);
-    for (i = 0; i < n; i++) yv[i] = p.obs[i].y;
-    var alpha = backSolve(Lc, forwardSolve(Lc, yv, n), n);
+    // One set of weights per offset. Everything else in the fit is shared between them.
+    var alpha = [], mean = [];
+    for (d = 0; d < 2; d++) {
+      var yv = new Float64Array(n);
+      for (i = 0; i < n; i++) yv[i] = p.obs[i].y[d];
+      alpha.push(backSolve(Lc, forwardSolve(Lc, yv, n), n));
+      mean.push(new Float64Array(m));
+    }
 
     // Cross-covariances, and V = Lc^{-1} Kgc^T.
-    var mean = new Float64Array(m);
     var V = new Float64Array(n * m);
     var kx = new Float64Array(n);
 
     for (i = 0; i < m; i++) {
-      var t = p.tg[i], mu = 0;
+      var t = p.tg[i];
       for (j = 0; j < n; j++) kx[j] = amp2 * k(t, p.obs[j].t);
-      for (j = 0; j < n; j++) mu += kx[j] * alpha[j];
-      mean[i] = mu;
+      for (d = 0; d < 2; d++) {
+        var mu = 0;
+        for (j = 0; j < n; j++) mu += kx[j] * alpha[d][j];
+        mean[d][i] = mu;
+      }
 
       var v = forwardSolve(Lc, kx, n);
       for (j = 0; j < n; j++) V[j * m + i] = v[j];
@@ -190,7 +234,8 @@
 
   /* build a path */
 
-  // Each thread's whitened state is rotated smoothly between two fixed Gaussian vectors,
+  // Each thread's whitened state, w1 and w2 end to end, is rotated smoothly between two
+  // fixed Gaussian vectors,
   //
   //     w(t) = cos(theta) a + sin(theta) b,     a, b ~ N(0, I),
   //
@@ -200,21 +245,24 @@
   // trajectory stays rough frame to frame however slowly it drifts. That roughness is
   // what reads as shimmer. Rotation has no high-frequency content at all.
   function makeField(m) {
-    var a = new Float64Array(m), b = new Float64Array(m);
-    for (var i = 0; i < m; i++) { a[i] = randn(); b[i] = randn(); }
+    var a = new Float64Array(2 * m), b = new Float64Array(2 * m);
+    for (var i = 0; i < 2 * m; i++) { a[i] = randn(); b[i] = randn(); }
+    var state = new Float64Array(2 * m);
     var f = {
       a: a, b: b,
-      w: new Float64Array(m),
+      w: state,
+      w1: state.subarray(0, m),
+      w2: state.subarray(m),
       theta: rand(0, Math.PI * 2),
       omega: (Math.PI * 2) / rand(3600, 7200)    // a full turn every one to two minutes
     };
-    syncField(f, m);
+    syncField(f);
     return f;
   }
 
-  function syncField(field, m) {
+  function syncField(field) {
     var c = Math.cos(field.theta), s = Math.sin(field.theta);
-    for (var i = 0; i < m; i++) field.w[i] = c * field.a[i] + s * field.b[i];
+    for (var i = 0; i < field.w.length; i++) field.w[i] = c * field.a[i] + s * field.b[i];
   }
 
   // How far a point can travel along (nx, ny) before leaving the viewport.
@@ -242,14 +290,28 @@
   function makePath() {
     var A, B, i;
 
-    // A calm horizon rather than a diagonal through the text: across the lower part of a
-    // landscape screen, or down near the right edge of a portrait one.
+    // Each curve leans anywhere from level to a shallow diagonal, one way or the other: across
+    // a landscape screen, or down a portrait one. A level curve sits in the lower part of the
+    // screen (or near the right edge); the steeper it leans, the closer to the middle it is
+    // centred, so both ends stay on the page. The offset of each end is capped too, since on a
+    // very wide or very tall screen those degrees would carry an end out past the corner.
+    // The centre is then held where both ends land inside a band that leaves the threads room
+    // to spread: on a phone, a steep lean would otherwise push one end against the right edge.
+    var steep = rand(TILT_MIN, TILT_MAX);
+    var lean = (Math.random() < 0.5 ? -1 : 1) * steep * Math.PI / 180;
+    var f = steep / TILT_MAX, shift, c;
     if (w >= h) {
-      A = [-12, h * rand(0.58, 0.7)];
-      B = [w + 12, h * rand(0.58, 0.7)];
+      shift = clamp((w / 2 + 12) * Math.tan(lean), -0.3 * h, 0.3 * h);
+      c = clamp(h * rand(0.6 - 0.1 * f, 0.68 - 0.12 * f),
+                0.2 * h + Math.abs(shift), 0.85 * h - Math.abs(shift));
+      A = [-12, c - shift];
+      B = [w + 12, c + shift];
     } else {
-      A = [w * rand(0.66, 0.86), -12];
-      B = [w * rand(0.66, 0.86), h + 12];
+      shift = clamp((h / 2 + 12) * Math.tan(lean), -0.2 * w, 0.2 * w);
+      c = clamp(w * rand(0.7 - 0.15 * f, 0.82 - 0.17 * f),
+                0.35 * w + Math.abs(shift), 0.88 * w - Math.abs(shift));
+      A = [c + shift, -12];
+      B = [c - shift, h + 12];
     }
 
     var dx = B[0] - A[0], dy = B[1] - A[1];
@@ -267,29 +329,31 @@
       nx: nx, ny: ny,
       len: len,
       k: makeKernel(),
-      // Prior sd is exactly `amp`, so the widest threads reach about 2*amp from the axis.
-      // Keep that inside the room the chord has, and cap it at 13% of the screen's short
-      // side so the swings are generous without taking over the page.
+      // Prior sd is exactly `amp` in every direction across the axis, so however the bundle
+      // is turned, the widest threads reach about 2*amp from the axis on screen. Keep that
+      // inside the room the chord has, and cap it at 13% of the screen's short side so the
+      // swings are generous without taking over the page.
       amp: Math.max(Math.min(room / 2.5, short * 0.13), short * 0.05),
       tg: tg,
-      obs: [{ t: 0, y: 0, born: 1 }, { t: 1, y: 0, born: 1 }],
+      obs: [{ t: 0, y: [0, 0], born: 1 }, { t: 1, y: [0, 0], born: 1 }],
       target: randInt(8, 12),
       frontier: rand(0, 0.08),
       timer: 0,
       nextStep: Math.round(STEP_FRAMES * rand(0.85, 1.3)),
       life: 0,
       dying: false,
+      phase: rand(0, Math.PI * 2),   // where in its rock the bundle starts
       fields: []
     };
     for (i = 0; i < SAMPLES; i++) p.fields.push(makeField(GRID));
 
     var post = posterior(p);
     p.mean = post.mean; p.sd = post.sd; p.L = post.L;
-    // What is drawn: a mean and a Cholesky factor that follow the posterior above through a
-    // spring (see settle), with their velocities.
-    p.drawMean = post.mean.slice();
+    // What is drawn: the two means and a Cholesky factor that follow the posterior above
+    // through a spring (see settle), with their velocities.
+    p.drawMean = [post.mean[0].slice(), post.mean[1].slice()];
     p.drawL = post.L.slice();
-    p.velMean = new Float64Array(GRID);
+    p.velMean = [new Float64Array(GRID), new Float64Array(GRID)];
     p.velL = new Float64Array(GRID * GRID);
     return p;
   }
@@ -311,7 +375,7 @@
     p.nextStep = Math.round(STEP_FRAMES * rand(0.85, 1.3));
 
     var i = nearest(t);
-    var y = p.mean[i] + p.sd[i] * randn();
+    var y = [p.mean[0][i] + p.sd[i] * randn(), p.mean[1][i] + p.sd[i] * randn()];
 
     // Only the posterior changes here. The drawn threads keep their position and velocity
     // and are pulled toward the new one from wherever they are (see settle).
@@ -345,7 +409,7 @@
 
   function advance(field) {
     field.theta += field.omega;
-    syncField(field, GRID);
+    syncField(field);
   }
 
   // One tick of a critically damped spring pulling x toward target. Position and velocity
@@ -361,7 +425,8 @@
   }
 
   function settle(p) {
-    follow(p.drawMean, p.velMean, p.mean);
+    follow(p.drawMean[0], p.velMean[0], p.mean[0]);
+    follow(p.drawMean[1], p.velMean[1], p.mean[1]);
     follow(p.drawL, p.velL, p.L);
   }
 
@@ -371,6 +436,7 @@
 
       for (var f = 0; f < p.fields.length; f++) advance(p.fields[f]);
       settle(p);
+      p.phase += (Math.PI * 2) / SWING_FRAMES;
 
       if (p.dying) {
         p.life -= 1 / FADE_FRAMES;
@@ -395,9 +461,12 @@
 
   /* drawing */
 
-  var dev  = new Float64Array(GRID);
-  var ys   = new Float64Array(GRID);
+  var dev1 = new Float64Array(GRID);
+  var dev2 = new Float64Array(GRID);
   var tmp  = new Float64Array(GRID);
+  var sx   = new Float64Array(GRID);   // projected thread, screen x
+  var sy   = new Float64Array(GRID);   // projected thread, screen y
+  var sz   = new Float64Array(GRID);   // depth before projection, positive away from the viewer
 
   // Binomial blur along the path. Near the observations the perturbation is already ~0,
   // so blurring cannot unpin the threads from the dots.
@@ -412,32 +481,87 @@
     }
   }
 
-  function xAt(p, i, f) { return p.A[0] + p.ux * p.tg[i] * p.len + p.nx * f; }
-  function yAt(p, i, f) { return p.A[1] + p.uy * p.tg[i] * p.len + p.ny * f; }
+  // The camera looks at the middle of the canvas from FOCAL long sides away. The rock angle
+  // of the path being drawn is kept as its cosine and sine. All are set in render().
+  var camX = 0, camY = 0, focal = 1, rockC = 1, rockS = 0;
+  var outX = 0, outY = 0, outZ = 0, outScale = 1;
 
-  // A smooth stroke through the grid points: quadratic segments between midpoints.
-  function trace(p, vals) {
-    ctx.moveTo(xAt(p, 0, vals[0]), yAt(p, 0, vals[0]));
-    for (var i = 1; i < GRID - 1; i++) {
-      var x1 = xAt(p, i, vals[i]), y1 = yAt(p, i, vals[i]);
-      var x2 = xAt(p, i + 1, vals[i + 1]), y2 = yAt(p, i + 1, vals[i + 1]);
-      ctx.quadraticCurveTo(x1, y1, (x1 + x2) / 2, (y1 + y2) / 2);
-    }
-    ctx.lineTo(xAt(p, GRID - 1, vals[GRID - 1]), yAt(p, GRID - 1, vals[GRID - 1]));
+  // A point `dist` along the axis with offsets f1 and f2: turn the offsets by the rock angle,
+  // place the point in space, and project it. The result lands in outX, outY (screen),
+  // outZ (depth), and outScale (how much perspective enlarges it).
+  function place(p, dist, f1, f2) {
+    var o = rockC * f1 - rockS * f2;   // along the in-screen normal
+    var z = rockS * f1 + rockC * f2;   // into the screen
+    var x = p.A[0] + p.ux * dist + p.nx * o;
+    var y = p.A[1] + p.uy * dist + p.ny * o;
+    outScale = focal / (focal + z);
+    outX = camX + (x - camX) * outScale;
+    outY = camY + (y - camY) * outScale;
+    outZ = z;
   }
 
-  // Observations, fading in as they land. The pinned ends sit just off screen.
-  function drawDots(p, alpha) {
-    ctx.fillStyle = ink;
-    for (var i = 0; i < p.obs.length; i++) {
+  // +1 for a point toward the viewer, -1 away, measured against the widest the threads reach.
+  function nearness(p, z) {
+    var v = -z / (2 * p.amp);
+    return v < -1 ? -1 : (v > 1 ? 1 : v);
+  }
+
+  // A smooth stroke through the projected grid points, quadratic segments between midpoints,
+  // cut into pieces of PIECE points so each can be shaded by its depth. Pieces meet at those
+  // midpoints, where the curve is already smooth, and butt caps keep the joins from doubling
+  // up into beads.
+  function strokeThread(p, alpha) {
+    var last = GRID - 1;
+    for (var a = 1; a < last; a += PIECE) {
+      var b = Math.min(a + PIECE, last), i, z = 0;
+      for (i = a - 1; i <= b; i++) z += sz[i];
+      var near = nearness(p, z / (b - a + 2));
+
+      ctx.globalAlpha = Math.min(1, alpha * (1 + 0.45 * near));
+      ctx.lineWidth = 0.7 * (1 + 0.25 * near);
+      ctx.beginPath();
+      if (a === 1) ctx.moveTo(sx[0], sy[0]);
+      else ctx.moveTo((sx[a - 1] + sx[a]) / 2, (sy[a - 1] + sy[a]) / 2);
+      for (i = a; i < b; i++) {
+        ctx.quadraticCurveTo(sx[i], sy[i], (sx[i] + sx[i + 1]) / 2, (sy[i] + sy[i + 1]) / 2);
+      }
+      if (b === last) ctx.lineTo(sx[last], sy[last]);
+      ctx.stroke();
+    }
+  }
+
+  var WHITE = [255, 255, 255], BLACK = [0, 0, 0];
+
+  // Observations, as small spheres fading in as they land. Each body sits between page and
+  // ink, --sphere of the way along, and a radial gradient lights it from the upper left:
+  // toward white at the highlight, toward black at the far rim, which reads as a ball in
+  // either theme. They are opaque, so the threads look strung through them, and drawn far to
+  // near, so a nearer sphere covers one behind it. The pinned ends sit just off screen.
+  function drawDots(p, fade) {
+    var dots = [], i;
+    for (i = 0; i < p.obs.length; i++) {
       var o = p.obs[i];
       if (o.t <= 0 || o.t >= 1) continue;
       var b = smoothstep(o.born);
       if (b <= 0) continue;
-      var d = o.t * p.len;
-      ctx.globalAlpha = alpha * b;
+      place(p, o.t * p.len, o.y[0], o.y[1]);
+      dots.push({ x: outX, y: outY, z: outZ, scale: outScale, alpha: fade * b });
+    }
+    dots.sort(function (u, v) { return v.z - u.z; });
+
+    for (i = 0; i < dots.length; i++) {
+      var d = dots[i];
+      var near = nearness(p, d.z);
+      var r = 3.8 * d.scale * (1 + 0.25 * near);
+      var body = mix(paperRGB, inkRGB, Math.min(1, sphereTone * (1 + 0.3 * near)));
+      var shade = ctx.createRadialGradient(d.x - 0.35 * r, d.y - 0.4 * r, 0, d.x, d.y, r);
+      shade.addColorStop(0, rgb(mix(body, WHITE, 0.35)));
+      shade.addColorStop(0.5, rgb(body));
+      shade.addColorStop(1, rgb(mix(body, BLACK, 0.25)));
+      ctx.globalAlpha = d.alpha;
+      ctx.fillStyle = shade;
       ctx.beginPath();
-      ctx.arc(p.A[0] + p.ux * d + p.nx * o.y, p.A[1] + p.uy * d + p.ny * o.y, 4, 0, Math.PI * 2);
+      ctx.arc(d.x, d.y, r, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -445,31 +569,39 @@
   function render() {
     ctx.clearRect(0, 0, w, h);
     ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
+    ctx.lineCap = 'butt';
+    ctx.strokeStyle = ink;
+    camX = w / 2;
+    camY = h / 2;
+    focal = FOCAL * Math.max(w, h);
 
     for (var q = 0; q < paths.length; q++) {
       var p = paths[q];
       var fade = smoothstep(p.life);
       if (fade <= 0.001) continue;
 
-      var i, s;
+      var rock = SWING * Math.sin(p.phase);
+      rockC = Math.cos(rock);
+      rockS = Math.sin(rock);
 
-      // Each thread is the drawn mean plus the drawn factor times that thread's whitened state.
-      ctx.strokeStyle = ink;
-      ctx.lineWidth = 0.7;
-      ctx.globalAlpha = Math.min(1, fade * opacity);
-      for (s = 0; s < p.fields.length; s++) {
-        lowerMul(p.drawL, p.fields[s].w, GRID, dev);
-        lowPass(dev, SMOOTH_PASSES);
-        for (i = 0; i < GRID; i++) ys[i] = p.drawMean[i] + dev[i];
-        ctx.beginPath();
-        trace(p, ys);
-        ctx.stroke();
+      // Each thread is the drawn means plus the drawn factor times that thread's whitened
+      // states, one per offset.
+      for (var s = 0; s < p.fields.length; s++) {
+        var field = p.fields[s];
+        lowerMul(p.drawL, field.w1, GRID, dev1);
+        lowerMul(p.drawL, field.w2, GRID, dev2);
+        lowPass(dev1, SMOOTH_PASSES);
+        lowPass(dev2, SMOOTH_PASSES);
+        for (var i = 0; i < GRID; i++) {
+          place(p, p.tg[i] * p.len, p.drawMean[0][i] + dev1[i], p.drawMean[1][i] + dev2[i]);
+          sx[i] = outX; sy[i] = outY; sz[i] = outZ;
+        }
+        strokeThread(p, Math.min(1, fade * opacity));
       }
 
-      // Where every thread passes through one point they overlap into a knot; the dot
-      // marks it at about the same strength.
-      drawDots(p, Math.min(1, fade * opacity * 4.8));
+      // Where every thread passes through one point they overlap into a knot; a sphere sits
+      // over it.
+      drawDots(p, fade);
     }
     ctx.globalAlpha = 1;
   }
@@ -549,10 +681,13 @@
       { attributes: true, attributeFilter: ['data-theme'] });
   }
 
+  // Held still, the bundle stays at whatever rock angle it was built with; the perspective
+  // and the depth shading still show which parts are near.
   if (reduceMotion) {
     var p = paths[0];
     while (p.target > 0 && p.frontier < 0.95) addObservation(p);
-    p.drawMean.set(p.mean); p.drawL.set(p.L); p.life = 1;
+    p.drawMean[0].set(p.mean[0]); p.drawMean[1].set(p.mean[1]);
+    p.drawL.set(p.L); p.life = 1;
     for (var j = 0; j < p.obs.length; j++) p.obs[j].born = 1;
     for (var f = 0; f < p.fields.length; f++) p.fields[f].omega = 0;
     render();

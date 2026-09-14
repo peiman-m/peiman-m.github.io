@@ -12,25 +12,34 @@ server to run; the only external request is the webfont.
 ## The background
 
 Two points are picked just off the screen edge: left and right on a landscape screen, top
-and bottom near the right side on a portrait one. The straight line between them is the
-axis, and a Gaussian process models the perpendicular deviation from it:
+and bottom on a portrait one, so that the straight line between them leans anywhere from
+level to a 20° diagonal. That line is the axis, and two independent Gaussian processes
+model the deviation from it, one across the screen and one into it:
 
 ```
-P(t) = A + t (B - A) + f(t) n,    f ~ GP(0, k),   t in [0, 1]
+P(t) = A + t (B - A) + f₁(t) n + f₂(t) z,    f₁, f₂ ~ GP(0, k),   t in [0, 1]
 ```
 
 The endpoints are observations pinned at `f = 0`. The path is then walked from start to
-end: every few seconds a new observation appears, its value drawn from the *current*
-posterior at that location, and the GP is refit. The kernel is an RBF; its lengthscale and
-amplitude are drawn at random, along with the number and spacing of observations.
+end: every few seconds a new observation appears, a point in space whose two offsets are
+drawn from the *current* posterior at that location, and the GP is refit. The kernel is an
+RBF; its lengthscale and amplitude are drawn at random, along with the number and spacing of
+observations.
 
 Nothing is drawn as a band. The page shows sixteen posterior samples as hairlines instead.
-Writing the posterior covariance as `L Lᵀ`, each sample is the mean plus `L w` with
-`w ~ N(0, I)`, so the threads pinch together at every observation and fan out wherever
-nothing has been seen: uncertainty reads as spread. The RBF matters, since its samples are
-smooth enough to stay clean as hairlines.
+Both offsets share the kernel and the observation locations, so they share one posterior
+covariance `L Lᵀ`, and each sample is the pair of means plus `L w₁` and `L w₂` with
+`w ~ N(0, I)`. The threads form a bundle, tied together at every observation and spread
+wherever nothing has been seen: uncertainty reads as the width of the bundle. The RBF
+matters, since its samples are smooth enough to stay clean as hairlines.
 
-Two details do most of the work:
+A still picture of a curve in space looks like a flat curve, so the depth has to be shown.
+**The bundle rocks slowly about its own axis**, so near and far parts move against each
+other while the pinned ends stay put. **It is drawn in perspective**, with nearer pieces of
+thread a little darker and thicker. The observations are small shaded spheres, larger when
+near, with the threads strung through them.
+
+Two more details do most of the work:
 
 **The threads follow each refit through a spring** rather than a timed ease. A critically
 damped spring pulls the drawn mean and Cholesky factor toward the new posterior, so position

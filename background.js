@@ -54,8 +54,16 @@
   var reduceMotion = window.matchMedia &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  var accent = getComputedStyle(document.documentElement)
-    .getPropertyValue('--link').trim() || '#008080';
+  // The curve takes its color (--link) and an opacity multiplier (--curve) from the
+  // palette, which changes with the theme, so both are read again whenever it flips (see
+  // the observer near the bottom).
+  var accent, strength;
+  function readAccent() {
+    var root = getComputedStyle(document.documentElement);
+    accent = root.getPropertyValue('--link').trim() || '#008080';
+    strength = parseFloat(root.getPropertyValue('--curve')) || 1;
+  }
+  readAccent();
 
   var w = 0, h = 0, dpr = 1;
   var paths = [];
@@ -436,7 +444,7 @@
 
     for (var q = 0; q < paths.length; q++) {
       var p = paths[q];
-      var a = p.alpha * smoothstep(p.life);
+      var a = p.alpha * strength * smoothstep(p.life);
       if (a <= 0.001) continue;
 
       var e = smoothstep(p.ease);
@@ -587,6 +595,19 @@
     if (reflow) build();
     if (reduceMotion) render();
   });
+
+  // The palette can change under a page that is already open: the toggle is clicked, or
+  // the system setting flips while no choice is saved. Either way the theme script in
+  // index.html sets a new data-theme on <html>. The animated loop picks the new color up
+  // on its next frame; the still one needs a repaint.
+  function onTheme() {
+    readAccent();
+    if (reduceMotion) render();
+  }
+  if (window.MutationObserver) {
+    new MutationObserver(onTheme).observe(document.documentElement,
+      { attributes: true, attributeFilter: ['data-theme'] });
+  }
 
   if (reduceMotion) {
     for (var i = 0; i < paths.length; i++) {

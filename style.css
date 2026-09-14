@@ -3,20 +3,29 @@
 /* Palette */
 
 :root {
+  color-scheme: light;
   --bg:    #f3f4f7;   /* cool paper */
   --fg:    #171a21;   /* titles */
   --mid:   #4c5563;   /* venues: between title and author list */
   --muted: #798294;   /* author lists, captions */
-  --link:  #33478c;   /* indigo */
+  --link:  #33478c;   /* indigo; also the background curve */
+  --gh:    #181717;   /* GitHub mark, official color */
+  --curve: 1;         /* background curve opacity multiplier, read by background.js */
 }
 
-/* Dark palette is opt-in, not OS-driven: set <body a="dark">. */
-body[a="dark"] {
+/* Dark palette. The theme script in index.html sets data-theme on <html> before first
+   paint: the choice saved from the toggle if there is one, otherwise the system setting.
+   The tokens stay on the root element because background.js reads --link and --curve
+   from there. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
   --bg:    #14161b;
   --fg:    #e2e5ea;
   --mid:   #aab2c0;
   --muted: #838b9a;
   --link:  #8aa4e8;
+  --gh:    #e2e5ea;
+  --curve: 1.5;       /* light marks on a dark ground read fainter at the same alpha */
 }
 
 /* Base */
@@ -41,7 +50,10 @@ body {
   padding: 4rem 1rem 5rem;   /* second value is the side gutter */
 }
 
-p { margin: 1rem 0; }
+p {
+  margin: 1rem 0;
+  text-wrap: pretty;   /* no single word stranded on a paragraph's last line */
+}
 
 a {
   color: var(--link);
@@ -50,7 +62,8 @@ a {
 
 a:hover { text-decoration: underline; }
 
-a:focus-visible {
+a:focus-visible,
+.theme-toggle:focus-visible {
   outline: 2px solid var(--link);
   outline-offset: 2px;
 }
@@ -71,16 +84,53 @@ a:focus-visible {
   pointer-events: none;
 }
 
-/* Name */
+/* Name, with the theme toggle across from it */
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
 
 h1 {
-  margin: 0 0 1.5rem;
+  margin: 0;
   font-size: 2.1rem;
   font-weight: 400;
   letter-spacing: -0.01em;
 }
 
 h1 .given { font-weight: 600; }
+
+/* Theme toggle. The icon shows the mode a click switches to. */
+
+.theme-toggle {
+  display: inline-flex;
+  margin-right: -0.6rem;   /* the padding widens the tap target; keep the glyph on the column edge */
+  padding: 0.6rem;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.theme-toggle:hover { color: var(--link); }
+
+.theme-toggle svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+/* Without the theme script (JavaScript off) there is no data-theme and the button
+   would do nothing, so it is hidden. */
+:root:not([data-theme]) .theme-toggle,
+:root[data-theme="dark"] .theme-toggle .moon,
+:root:not([data-theme="dark"]) .theme-toggle .sun { display: none; }
 
 /* Profile photo */
 
@@ -124,8 +174,7 @@ h1 .given { font-weight: 600; }
 
 /* Brand icons carry their official colors; GitHub's mark is near-black, so it
    flips to the light foreground when the dark palette is on. */
-.social .gh { fill: #181717; }
-body[a="dark"] .social .gh { fill: #e2e5ea; }
+.social .gh { fill: var(--gh); }
 
 /* Publications */
 
@@ -178,6 +227,18 @@ h2 {
   color: var(--muted);
   font-size: 0.94em;
 }
+
+/* Note on the background, at the foot of the page */
+
+.colophon {
+  max-width: 36em;       /* a short measure, never a line across the whole page */
+  margin-top: 4rem;
+  color: var(--muted);
+  font-size: 0.94em;
+  text-wrap: pretty;
+}
+
+.colophon a { white-space: nowrap; }
 
 /* Small screens */
 

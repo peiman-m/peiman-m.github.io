@@ -245,14 +245,11 @@ h2 {
 /* Note on the background, at the foot of the page */
 
 .colophon {
-  max-width: 36em;       /* a short measure, never a line across the whole page */
   margin-top: 4rem;
   color: var(--muted);
-  font-size: 0.94em;
+  font-size: 0.82em;     /* small enough to sit on one line wherever the column allows */
   text-wrap: pretty;
 }
-
-.colophon a { white-space: nowrap; }
 
 /* Small screens */
 

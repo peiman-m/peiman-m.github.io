@@ -10,7 +10,7 @@
   --muted: #798294;   /* author lists, captions */
   --link:  #33478c;   /* indigo; also the background curve */
   --gh:    #181717;   /* GitHub mark, official color */
-  --curve: 1;         /* background curve opacity multiplier, read by background.js */
+  --curve: 0.09;      /* opacity of each background thread, read by background.js */
 }
 
 /* Dark palette. The theme script in index.html sets data-theme on <html> before first
@@ -25,7 +25,7 @@
   --muted: #838b9a;
   --link:  #8aa4e8;
   --gh:    #e2e5ea;
-  --curve: 1.5;       /* light marks on a dark ground read fainter at the same alpha */
+  --curve: 0.1;       /* light hairlines carry further on a dark ground, so barely more */
 }
 
 /* Base */
@@ -49,6 +49,11 @@ body {
   margin: 0 auto;
   padding: 4rem 1rem 5rem;   /* second value is the side gutter */
 }
+
+/* Entrance: index.html adds .entering before first paint and removes it once the webfont is
+   ready, so the content fades in once instead of appearing all at once. */
+.w { transition: opacity 0.8s ease-out; }
+:root.entering .w { opacity: 0; }
 
 p {
   margin: 1rem 0;
@@ -82,6 +87,15 @@ a:focus-visible,
   height: 100lvh;
   z-index: -1;
   pointer-events: none;
+}
+
+/* On wide screens the threads fade to under half strength behind the text column, so they
+   read as coming out of the margins rather than running over the words. */
+@media (min-width: 900px) {
+  #bg {
+    -webkit-mask-image: linear-gradient(90deg, #000, rgba(0, 0, 0, .45) 26%, rgba(0, 0, 0, .45) 74%, #000);
+            mask-image: linear-gradient(90deg, #000, rgba(0, 0, 0, .45) 26%, rgba(0, 0, 0, .45) 74%, #000);
+  }
 }
 
 /* Name, with the theme toggle across from it */

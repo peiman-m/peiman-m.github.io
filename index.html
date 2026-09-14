@@ -52,6 +52,30 @@
   // The button doesn't exist yet on the first apply(), so sync its pressed state once it does.
   document.addEventListener('DOMContentLoaded', function () { apply(root.getAttribute('data-theme')); });
 
+  // Entrance: the content stays hidden until the webfont is ready, so the text never swaps
+  // from a fallback face, then style.css fades it in. The wait is capped at one second and
+  // skipped for reduced motion. Without JavaScript the class is never added.
+  var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!still) {
+    root.classList.add('entering');
+    var revealed = false;
+    var reveal = function () {
+      if (revealed) return;
+      revealed = true;
+      // Read the hidden opacity first, so the browser has computed it and removing the class
+      // runs the fade. This needs no painted frame, so a tab that isn't drawing yet can't
+      // get stuck with the content hidden.
+      var content = document.querySelector('.w');
+      if (content) void getComputedStyle(content).opacity;
+      root.classList.remove('entering');
+    };
+    setTimeout(reveal, 1000);
+    document.addEventListener('DOMContentLoaded', function () {
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(reveal);
+      else reveal();
+    });
+  }
+
   document.addEventListener('click', function (e) {
     if (!e.target.closest || !e.target.closest('.theme-toggle')) return;
     var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';

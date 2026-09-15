@@ -22,16 +22,19 @@ P(t) = A + t (B - A) + f₁(t) n + f₂(t) z,    f₁, f₂ ~ GP(0, k),   t in [
 
 The endpoints are observations pinned at `f = 0`. The path is then walked from start to
 end: every few seconds a new observation appears, a point in space whose two offsets are
-drawn from the *current* posterior at that location, and the GP is refit. The kernel is an
-RBF; its lengthscale and amplitude are drawn at random, along with the number and spacing of
-observations.
+drawn from the *current* posterior at that location, and the GP is refit. Each curve picks
+its kernel at random, RBF or Matérn 5/2; its lengthscale and amplitude are drawn at random
+too, along with the number and spacing of observations.
 
 Nothing is drawn as a band. The page shows sixteen posterior samples as hairlines instead.
 Both offsets share the kernel and the observation locations, so they share one posterior
 covariance `L Lᵀ`, and each sample is the pair of means plus `L w₁` and `L w₂` with
 `w ~ N(0, I)`. The threads form a bundle, tied together at every observation and spread
-wherever nothing has been seen: uncertainty reads as the width of the bundle. The RBF
-matters, since its samples are smooth enough to stay clean as hairlines.
+wherever nothing has been seen: uncertainty reads as the width of the bundle. The kernel
+choice matters, since the samples must be smooth enough to stay clean as hairlines: RBF
+samples are infinitely differentiable and Matérn 5/2 samples twice, which is still enough.
+Both draw their lengthscale from the same range, so a Matérn 5/2 curve is the busier of the
+two: it bends about a quarter more often, with more small-scale wiggle.
 
 A still picture of a curve in space looks like a flat curve, so the depth has to be shown.
 **The bundle rocks slowly about its own axis**, so near and far parts move against each

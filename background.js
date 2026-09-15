@@ -32,8 +32,8 @@
  * The drawn posterior follows each refit through a critically damped spring rather than a
  * timed ease, so the bundle tightens smoothly, and an observation landing mid-squeeze only
  * redirects the motion instead of stopping it or making it jump. After the walk reaches the
- * far end the finished curve holds, fades, and a new one begins with fresh endpoints and
- * lengthscale.
+ * far end the finished curve holds, fades, and a new one begins with fresh endpoints, kernel
+ * (RBF or Matérn 5/2) and lengthscale.
  *
  * Plain canvas, no dependencies.
  */
@@ -122,11 +122,20 @@
 
   /* kernel (correlation only; amplitude applied separately) */
 
-  // RBF only: its samples are infinitely smooth, which is what keeps hairlines clean. A
-  // Matérn sample is rough at grid scale and reads as fuzz once drawn at full size.
+  // Each curve picks RBF or Matérn 5/2, evenly, over the same lengthscale range. RBF samples
+  // are infinitely differentiable and Matérn 5/2 samples only twice, which still strokes as
+  // clean hairlines but makes the busier bundle: at the same lengthscale a Matérn 5/2 sample
+  // bends about a quarter more often and carries about twice the small-scale wiggle.
   function makeKernel() {
     var ell = rand(0.04, 0.075);   // three to five bends across the path
-    return function (a, b) { var d = (a - b) / ell; return Math.exp(-0.5 * d * d); };
+    if (Math.random() < 0.5) {
+      return function (a, b) { var d = (a - b) / ell; return Math.exp(-0.5 * d * d); };
+    }
+    var root5 = Math.sqrt(5) / ell;
+    return function (a, b) {
+      var s = root5 * Math.abs(a - b);
+      return (1 + s + s * s / 3) * Math.exp(-s);
+    };
   }
 
   /* linear algebra */

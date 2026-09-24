@@ -55,7 +55,11 @@ every frame is still a valid posterior draw, but OU has white-noise increments a
 rough frame to frame however slowly it drifts.
 
 Amplitude is scaled to the perpendicular room the chord actually has, which keeps the
-threads on screen. On wide screens the canvas fades to under half strength behind the text
-column. The finished curve holds for about thirty seconds before the next one fades in.
+threads on screen. On wide screens the canvas fades behind the text column, by a per-theme
+fraction: the light theme draws its threads stronger, since dark hairlines on pale paper
+lose more to antialiasing, and masks them harder, so both themes land at about the same
+strength behind the words. The spheres also know where the column is, and one that lands
+behind the text shrinks a little and goes translucent. The finished curve holds for about
+thirty seconds before the next one fades in.
 
 `prefers-reduced-motion` resolves the whole walk at once and holds it still.

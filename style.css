@@ -10,14 +10,16 @@
   --muted: #798294;   /* author lists, captions */
   --link:  #33478c;   /* indigo; also the background curve */
   --gh:    #181717;   /* GitHub mark, official color */
-  --curve: 0.12;      /* opacity of each background thread, read by background.js */
+  --curve: 0.2;       /* opacity of each background thread, read by background.js */
   --sphere: 0.32;     /* observation spheres: how far the body sits from page toward ink */
+  --sphere-behind: 0.4;   /* how much of a sphere is left where it lands behind the text column */
+  --behind: 0.28;     /* strength of the whole canvas behind the text column, on wide screens */
 }
 
 /* Dark palette. The theme script in index.html sets data-theme on <html> before first
    paint: the choice saved from the toggle if there is one, otherwise the system setting.
-   The tokens stay on the root element because background.js reads --fg, --bg, --curve and
-   --sphere from there. */
+   The tokens stay on the root element because background.js reads --fg, --bg, --curve,
+   --sphere and --sphere-behind from there. */
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg:    #14161b;
@@ -28,6 +30,8 @@
   --gh:    #e2e5ea;
   --curve: 0.1;       /* light hairlines carry further on a dark ground, so less is needed */
   --sphere: 0.38;     /* further toward the light ink, so the spheres read lighter */
+  --sphere-behind: 0.35;
+  --behind: 0.45;     /* the light theme masks harder, since its threads start stronger */
 }
 
 /* Base */
@@ -91,12 +95,14 @@ a:focus-visible,
   pointer-events: none;
 }
 
-/* On wide screens the threads fade to under half strength behind the text column, so they
-   read as coming out of the margins rather than running over the words. */
+/* On wide screens the threads fade to a fraction of their strength behind the text column,
+   so they read as coming out of the margins rather than running over the words. The
+   fraction (--behind) is set per theme: each palette picks a per-thread opacity that shows
+   in its margins, and the mask brings both down to about the same strength behind the text. */
 @media (min-width: 900px) {
   #bg {
-    -webkit-mask-image: linear-gradient(90deg, #000, rgba(0, 0, 0, .45) 26%, rgba(0, 0, 0, .45) 74%, #000);
-            mask-image: linear-gradient(90deg, #000, rgba(0, 0, 0, .45) 26%, rgba(0, 0, 0, .45) 74%, #000);
+    -webkit-mask-image: linear-gradient(90deg, #000, rgba(0, 0, 0, var(--behind)) 26%, rgba(0, 0, 0, var(--behind)) 74%, #000);
+            mask-image: linear-gradient(90deg, #000, rgba(0, 0, 0, var(--behind)) 26%, rgba(0, 0, 0, var(--behind)) 74%, #000);
   }
 }
 

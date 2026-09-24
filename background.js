@@ -72,9 +72,11 @@
 
   // The threads take their colour (--fg) and per-thread opacity (--curve) from the palette,
   // and the observation spheres are shaded between that ink and the page (--bg), with the
-  // body --sphere of the way toward the ink. All of it changes with the theme, so it is read
-  // again whenever that flips (see the observer near the bottom).
-  var ink, inkRGB, paperRGB, opacity, sphereTone;
+  // body --sphere of the way toward the ink. A sphere that lands behind the text column is
+  // drawn at --sphere-behind of its strength, so it never competes with the words. All of
+  // it changes with the theme, so it is read again whenever that flips (see the observer
+  // near the bottom).
+  var ink, inkRGB, paperRGB, opacity, sphereTone, sphereBehind;
   function readPalette() {
     var root = getComputedStyle(document.documentElement);
     ink = root.getPropertyValue('--fg').trim() || '#171a21';
@@ -82,6 +84,8 @@
     paperRGB = parseHex(root.getPropertyValue('--bg').trim() || '#f3f4f7');
     opacity = parseFloat(root.getPropertyValue('--curve')) || 0.12;
     sphereTone = parseFloat(root.getPropertyValue('--sphere')) || 0.32;
+    var behind = parseFloat(root.getPropertyValue('--sphere-behind'));
+    sphereBehind = isNaN(behind) ? 1 : behind;
   }
 
   // '#rrggbb' to [r, g, b], which is how the palette writes its colours.
@@ -406,6 +410,30 @@
     return [Math.round(r.width), Math.round(r.height)];
   }
 
+  // The text column, as the left and right edges of the content box of .w, so a sphere
+  // can tell whether it sits behind the words. Measured on each resize, since the column
+  // is centred and capped by the stylesheet. Without the element there is no column.
+  var colL = -Infinity, colR = -Infinity;
+  var COL_RAMP = 40;   // px over which a sphere fades in or out at the column edge
+
+  function measureColumn() {
+    var el = document.querySelector('.w');
+    if (!el) { colL = colR = -Infinity; return; }
+    var r = el.getBoundingClientRect();
+    var cs = getComputedStyle(el);
+    colL = r.left + (parseFloat(cs.paddingLeft) || 0);
+    colR = r.right - (parseFloat(cs.paddingRight) || 0);
+  }
+
+  // 1 for a point in the margins, sphereBehind for one behind the column, with a smooth
+  // ramp COL_RAMP wide centred on each column edge so nothing pops crossing it.
+  function cover(x) {
+    var t = Math.min(x - colL, colR - x) / COL_RAMP + 0.5;   // 0 outside, 1 inside
+    t = t < 0 ? 0 : (t > 1 ? 1 : t);
+    t = t * t * (3 - 2 * t);
+    return 1 + (sphereBehind - 1) * t;
+  }
+
   function resize() {
     var m = measure();
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -414,6 +442,7 @@
     canvas.width  = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    measureColumn();
   }
 
   function advance(field) {
@@ -545,7 +574,9 @@
   // ink, --sphere of the way along, and a radial gradient lights it from the upper left:
   // toward white at the highlight, toward black at the far rim, which reads as a ball in
   // either theme. They are opaque, so the threads look strung through them, and drawn far to
-  // near, so a nearer sphere covers one behind it. The pinned ends sit just off screen.
+  // near, so a nearer sphere covers one behind it. Behind the text column they shrink a
+  // little and go translucent (see cover), so the words stay the darkest thing there. The
+  // pinned ends sit just off screen.
   function drawDots(p, fade) {
     var dots = [], i;
     for (i = 0; i < p.obs.length; i++) {
@@ -561,13 +592,14 @@
     for (i = 0; i < dots.length; i++) {
       var d = dots[i];
       var near = nearness(p, d.z);
-      var r = 3.8 * d.scale * (1 + 0.25 * near);
+      var c = cover(d.x);
+      var r = 3.8 * d.scale * (1 + 0.25 * near) * (0.75 + 0.25 * c);
       var body = mix(paperRGB, inkRGB, Math.min(1, sphereTone * (1 + 0.3 * near)));
       var shade = ctx.createRadialGradient(d.x - 0.35 * r, d.y - 0.4 * r, 0, d.x, d.y, r);
       shade.addColorStop(0, rgb(mix(body, WHITE, 0.35)));
       shade.addColorStop(0.5, rgb(body));
       shade.addColorStop(1, rgb(mix(body, BLACK, 0.25)));
-      ctx.globalAlpha = d.alpha;
+      ctx.globalAlpha = d.alpha * c;
       ctx.fillStyle = shade;
       ctx.beginPath();
       ctx.arc(d.x, d.y, r, 0, Math.PI * 2);

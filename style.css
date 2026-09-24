@@ -10,10 +10,10 @@
   --muted: #798294;   /* author lists, captions */
   --link:  #33478c;   /* indigo; also the background curve */
   --gh:    #181717;   /* GitHub mark, official color */
-  --curve: 0.2;       /* opacity of each background thread, read by background.js */
+  --curve: 0.28;      /* opacity of each background thread, read by background.js */
   --sphere: 0.32;     /* observation spheres: how far the body sits from page toward ink */
   --sphere-behind: 0.4;   /* how much of a sphere is left where it lands behind the text column */
-  --behind: 0.28;     /* strength of the whole canvas behind the text column, on wide screens */
+  --behind: 0.2;      /* strength of the whole canvas behind the text column, on wide screens */
 }
 
 /* Dark palette. The theme script in index.html sets data-theme on <html> before first
